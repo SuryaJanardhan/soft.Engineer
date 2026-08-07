@@ -217,6 +217,35 @@ The model supplies neither arbitrary shell text nor arbitrary filesystem paths. 
 
 For local development, a SQLite-backed LangGraph checkpointer is acceptable. For production or any workflow that must survive concurrent workers, use a database-backed production checkpointer such as Postgres and keep the application audit records in the same durable database. LangGraph checkpoints resume the agent graph; the `jobs` table and idempotency keys remain responsible for external side effects such as Git pushes and PR creation.
 
+### MVP module layout
+
+The Python MVP implements these boundaries in `agents/`:
+
+```text
+agents/
+├── main.py                 # CLI and run_agent_job entry point
+├── graph.py                # LangGraph topology and conditional routes
+├── config.py               # File, command, and repair budgets
+├── models.py               # Ticket, policy, and graph-state contracts
+├── policy.py               # Deterministic eligibility and incident checks
+├── store.py                # SQLite events, jobs, leases, and audit log
+├── services.py             # Explicit dependency container
+├── model.py                # Structured planning-model interface and demo adapter
+├── repository.py           # Safe demo repository and draft-PR adapter
+└── nodes/
+    ├── preflight.py        # Lease and policy guard
+    ├── context.py          # Repository search sub-functions
+    ├── planning.py         # Structured planning and scope validation
+    ├── workspace.py        # Worktree and branch preparation
+    ├── execution.py        # Policy-enforced tool loop
+    ├── validation.py       # Configured checks and repair routing
+    ├── repair.py           # One bounded repair attempt
+    ├── handoff.py          # Idempotent draft-PR handoff
+    └── stop.py             # Safe failure and pause handling
+```
+
+The initial repository and model adapters are intentionally local demo adapters. Replace them with production adapters only after the policy, idempotency, and integration tests cover their side effects.
+
 ## 9. Permission Model
 
 | Integration | Allowed | Explicitly prohibited |
