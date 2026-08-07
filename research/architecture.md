@@ -130,6 +130,16 @@ Each node receives and returns JSON-serializable state only. Network calls, Git 
 - Creates a draft PR with a fixed template: change summary, rationale, validation evidence, remaining risk, test gaps, and rollback notes.
 - Cannot approve, merge, dismiss checks, alter branch protections, or deploy.
 
+### Central repository knowledge base
+
+The knowledge base is separate from LangGraph checkpoints. It is durable shared memory for one configured core repository and contains a code graph plus prior-fix evidence:
+
+- Code nodes: Python modules, classes, and functions.
+- Code edges: module definitions and imports.
+- Fix records: ticket summary, changed files, validation evidence, draft PR URL, and a human-recorded outcome of `merged`, `rejected`, or `reverted`.
+
+Before planning, the context node queries symbols related to the ticket and similar prior fixes. The model receives those as evidence, not instructions. A previous rejected or reverted fix must be treated as a warning, never copied automatically.
+
 ## 7. Minimal Data Model
 
 ```text

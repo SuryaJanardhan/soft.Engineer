@@ -25,4 +25,16 @@ def create_draft_pr_node(state: dict[str, object], services: WorkflowServices) -
         services,
     )
     post_jira_comment(job_id, f"Draft PR created: {pr_url}", services)
+    if services.jira_client is not None:
+        services.jira_client.add_comment(str(state["ticket"]["ticket_id"]), f"Draft PR created: {pr_url}")
+    if services.knowledge_base is not None:
+        services.knowledge_base.record_fix(
+            repository=str(state["ticket"]["repository"]),
+            ticket_id=str(state["ticket"]["ticket_id"]),
+            summary=str(state["ticket"]["summary"]),
+            files=[str(change["path"]) for change in state["changes"]],
+            validation=state["validation"],
+            pr_url=pr_url,
+            outcome="draft_created",
+        )
     return {"pr_url": pr_url, "final_state": "awaiting_pr_review"}
