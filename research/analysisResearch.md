@@ -87,6 +87,26 @@ Production impact:
 - Harder rollbacks.
 - Higher chance of inserting subtle regressions.
 
+### 8. Priority inversion and incident interference
+
+Jira priority is not enough to decide what the system should work on. Values can be stale, manually inconsistent, or disconnected from an active incident. A background agent that keeps editing P3 work while a P0 incident is active competes for compute, reviewer attention, and repository stability when the team needs focus.
+
+Production impact:
+
+- A low-value change lands during an incident and complicates diagnosis or rollback.
+- The system chooses a task that is nominally high priority but blocked, risky, or owned by another team.
+- Duplicate webhooks start duplicate runs against the same ticket.
+
+### 9. Misleading workflow status
+
+If an agent changes a ticket to `In Progress`, `Done`, or `Blocked`, Jira no longer clearly identifies the accountable human decision. This is especially damaging during incidents and audits, where a status change is an operational claim, not a progress animation.
+
+Production impact:
+
+- Tickets appear complete even though a reviewer rejected the change.
+- Teams cannot distinguish agent execution state from a human-approved lifecycle decision.
+- Incident timelines become unreliable.
+
 ## Root Cause Categories
 
 The failures above usually come from one of five categories:
@@ -159,6 +179,32 @@ Every PR should include:
 
 This is what makes the output reviewable in production.
 
+### G. Policy-based scheduling and separate state
+
+Treat task selection as a deterministic policy, not an LLM judgement. The scheduler considers only tickets manually moved to `Agent Ready`, then applies configured priority, ownership, risk, age, repository allowlists, and available capacity. It must persist an idempotency key per Jira event and a lease per active task.
+
+Maintain two separate state models:
+
+| State owner | Purpose | Examples |
+|---|---|---|
+| Human in Jira | Accountability and lifecycle | `Backlog`, `Agent Ready`, `Plan Review`, `PR Review`, `Done`, `Blocked` |
+| Workflow engine | Durable execution progress | `queued`, `analyzing`, `awaiting_plan_approval`, `executing`, `validating`, `paused`, `failed` |
+
+The agent has no Jira transition permission. It may add a structured comment with its plan, risk assessment, validation result, or PR link. A human performs every Jira status transition.
+
+### H. Incident policy
+
+An active incident changes scheduling behavior but must not turn the agent into an autonomous incident responder.
+
+| Severity | System behavior |
+|---|---|
+| P0 | Stop queued work and pause running jobs before an edit, push, or other mutation. Gather read-only context and notify the incident owner. |
+| P1 | Pause normal execution. Prepare an impact report or proposed plan. Require explicit human approval before a draft PR. |
+| P2 | Permit normal workflow only after the normal plan gate and only when no P0/P1 policy blocks it. |
+| P3/P4 | Eligible for automatic selection when capacity is available. |
+
+Pause must be cooperative and checkpointed. Do not terminate a process in the middle of a file write, commit, or push. A human decides whether a paused task is resumed or cancelled.
+
 ## Comparison Matrix
 
 ### Single agent vs multi-agent
@@ -198,6 +244,9 @@ Recommendation: use live retrieval as the source of truth and memory only for du
 - Log every action the agent takes.
 - Keep rollback instructions attached to the PR.
 - Escalate to a human when confidence drops below a threshold.
+- Use durable storage for event receipts, task leases, checkpoints, approvals, and audit records; a JSON file is not sufficient once events can be retried or tasks can overlap.
+- Give the agent least-privilege credentials: ticket read and comment access, constrained branch creation, and draft PR creation. No Jira transitions, merges, deployments, or broad secret access.
+- Enforce repository and path allowlists, command allowlists, maximum cost, time, and file-change budgets.
 
 ## What This Solves
 
