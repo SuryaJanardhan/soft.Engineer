@@ -13,7 +13,7 @@ The previous idea of "no queues and no databases" is not compatible with automat
 1. Jira statuses are human-controlled only. The service has no permission to transition an issue.
 2. Only tickets a human has moved to `Agent Ready` are eligible for selection.
 3. A deterministic scheduler selects work; the LLM never decides queue priority.
-4. A P0 stops normal mutation work. A P1 blocks execution unless a human explicitly approves it.
+4. A P0 or P1 stops normal mutation work. The system may gather read-only evidence, but it does not edit, push, or open a PR for an active P0/P1.
 5. The service may create only a constrained branch and a draft PR. It cannot merge, deploy, or alter production systems.
 6. The workflow persists every event receipt, approval, checkpoint, and failure before taking the next action.
 
@@ -30,7 +30,7 @@ Eligibility + incident policy + deterministic priority selection
         ↓
 Create a leased internal job in SQLite
         ↓
-Analyze live repository context and publish plan comment
+LangGraph executes analysis, implementation, repair, and validation
         ↓
 Create isolated worktree, make bounded edits, run validation
         ↓
@@ -96,6 +96,27 @@ Pausing is cooperative. A worker checks for a pause before editing, committing, 
 - Produces a structured plan: target files, expected behavior, risks, test commands, assumptions, and rollback approach.
 - Posts the plan as a Jira comment for traceability, then continues automatically when the ticket remains eligible.
 
+### LangGraph agent executor
+
+LangGraph owns the bounded, agentic portion of a single job. It is not the scheduler and it does not get credentials for Jira status transitions or merges. Its graph state is scoped to one `job_id`; the application database remains the audit and coordination source of truth.
+
+The graph provides what a plain linear function does not: conditional routes, durable checkpoints after each node, a controlled repair loop after failed validation, and an explicit safe stop before each external mutation.
+
+```text
+preflight
+  → collect_context
+  → make_plan
+  → prepare_worktree
+  → implement
+  → validate ── pass ──→ create_draft_pr
+       │                       ↓
+       └── repair ─────────────┘
+              │
+              └── retry limit, policy failure, or pause → stop
+```
+
+Each node receives and returns JSON-serializable state only. Network calls, Git writes, and model calls are wrapped as idempotent activities using the job ID and a mutation-specific idempotency key. A resumed node must be safe to run again.
+
 ### Isolated executor and validator
 
 - Creates an ephemeral worktree per job and uses a restricted tool allowlist.
@@ -122,7 +143,81 @@ audit_log(job_id, correlation_id, action, actor, outcome, occurred_at)
 
 SQLite is enough for one worker and low volume. Move to Postgres plus a durable workflow engine only when multiple workers, high event rates, or long-running workflows require it.
 
-## 8. Permission Model
+## 8. LangGraph Function Design
+
+The implementation should have thin graph nodes and ordinary testable functions beneath them. A node coordinates one decision boundary; helper functions do the I/O and return typed data. Do not bury tool execution, policy checks, and retry logic inside a single model prompt.
+
+### Graph state
+
+```python
+class AgentState(TypedDict):
+    job_id: str
+    ticket: NormalizedTicket
+    policy: PolicyDecision
+    worktree_path: str | None
+    repository_ref: str
+    context: RepositoryContext
+    plan: ImplementationPlan | None
+    changes: list[FileChange]
+    validation: ValidationReport | None
+    repair_attempts: int
+    pr_url: str | None
+    stop_reason: str | None
+```
+
+`job_id`, `repository_ref`, `repair_attempts`, and every side-effect result must be checkpointed. Never put raw secrets, full unredacted command output, or an unrestricted chat history in graph state.
+
+### Deterministic application functions
+
+| Function | Responsibility | Must not do |
+|---|---|---|
+| `receive_jira_event(payload)` | Verify webhook, deduplicate, store receipt | Start an agent run directly |
+| `select_next_job()` | Apply incident, priority, eligibility, and capacity policy | Ask an LLM which ticket matters most |
+| `acquire_job_lease(job_id)` | Guarantee one active worker per job | Modify Jira status |
+| `should_pause(job_id)` | Check incident state and cancellation before mutation | Depend on stale graph state alone |
+| `record_audit_event(...)` | Persist actor, action, outcome, correlation ID | Store secrets or raw credentials |
+| `run_agent_job(job_id)` | Load one leased job and invoke/resume LangGraph | Select or reprioritize other jobs |
+
+### LangGraph nodes and helpers
+
+| Node | Helper functions | Input | Output and route |
+|---|---|---|---|
+| `preflight_node` | `should_pause`, `verify_policy`, `verify_lease` | Job and policy | Route to `stop` if paused or rejected; otherwise `collect_context` |
+| `collect_context_node` | `search_repo`, `read_codeowners`, `read_recent_diffs`, `find_tests` | Ticket and repository ref | Bounded `RepositoryContext` |
+| `make_plan_node` | `call_model_structured`, `validate_plan_schema`, `check_plan_scope` | Ticket and context | Valid `ImplementationPlan`, or `stop` for ambiguity/scope failure |
+| `prepare_worktree_node` | `create_worktree`, `create_agent_branch`, `record_checkpoint` | Approved repository ref | Isolated worktree and branch name |
+| `implement_node` | `agent_tool_loop`, `read_file`, `apply_patch`, `run_allowed_command` | Plan and worktree | Recorded file changes; route to `validate` or `stop` |
+| `validate_node` | `run_configured_checks`, `collect_diff`, `evaluate_validation` | Changes and allowed commands | Route to `create_draft_pr`, `repair`, or `stop` |
+| `repair_node` | `call_model_structured`, `agent_tool_loop`, `increment_repair_attempt` | Failed validation report | Route to `validate`, or `stop` at retry limit |
+| `create_draft_pr_node` | `push_branch_idempotently`, `create_draft_pr_idempotently`, `post_jira_comment` | Validated diff and evidence | PR URL and `completed` |
+| `stop_node` | `record_stop_reason`, `post_jira_comment` | Stop reason | `paused` or `failed`; never changes Jira status |
+
+### Tool contract
+
+The LLM can request tools, but tools enforce policy independently. Every tool takes `job_id` and checks the lease, pause flag, repository allowlist, and path policy before acting.
+
+```python
+def apply_patch(job_id: str, path: str, patch: str) -> ToolResult:
+    require_active_lease(job_id)
+    require_not_paused(job_id)
+    require_allowed_path(path)
+    require_file_budget(job_id)
+    return apply_patch_in_worktree(job_id, path, patch)
+
+def run_allowed_command(job_id: str, command_id: str) -> CommandResult:
+    require_active_lease(job_id)
+    require_not_paused(job_id)
+    command = configured_command(command_id)
+    return run_in_worktree(job_id, command)
+```
+
+The model supplies neither arbitrary shell text nor arbitrary filesystem paths. Validation commands are selected from repository configuration. The agent may propose a test command, but the policy layer must map that proposal to an approved command ID.
+
+### Persistence approach
+
+For local development, a SQLite-backed LangGraph checkpointer is acceptable. For production or any workflow that must survive concurrent workers, use a database-backed production checkpointer such as Postgres and keep the application audit records in the same durable database. LangGraph checkpoints resume the agent graph; the `jobs` table and idempotency keys remain responsible for external side effects such as Git pushes and PR creation.
+
+## 9. Permission Model
 
 | Integration | Allowed | Explicitly prohibited |
 |---|---|---|
@@ -131,12 +226,13 @@ SQLite is enough for one worker and low volume. Move to Postgres plus a durable 
 | Repository worker | Read configured repo and write its ephemeral worktree | Access host secrets, other repositories, arbitrary network targets |
 | Notifications | Post status summaries | Treat a Slack reaction as a workflow transition |
 
-## 9. MVP Technology Choices
+## 10. MVP Technology Choices
 
 | Concern | MVP choice | Reason |
 |---|---|---|
 | Runtime | Python 3.11+ | Straightforward API and tooling support |
-| Workflow | Explicit state machine | Easy to test and audit at low volume |
+| Job orchestration | Explicit state machine + SQLite | Owns queue policy, leases, audit state, and Jira boundaries |
+| Agent workflow | LangGraph | Checkpointed graph, conditional repair loop, and bounded tool execution |
 | Persistence | SQLite | Needed for idempotency, pause/resume, and audit history |
 | Model integration | Provider adapter with structured output | Avoids coupling policy and state to one model SDK |
 | Repository context | Git CLI plus language-aware parser where needed | Live and inspectable evidence |
@@ -144,9 +240,9 @@ SQLite is enough for one worker and low volume. Move to Postgres plus a durable 
 | Observability | Structured JSON logs with correlation IDs | Traceable job history from day one |
 | Deployment | One containerized worker and one webhook endpoint | Smallest deployable durable unit |
 
-Do not add Kubernetes, a vector database, Temporal, or multi-agent coordination in V1. Add a durable workflow engine after the SQLite worker demonstrates a real need for distributed retries or parallelism.
+Do not add Kubernetes, a vector database, Temporal, or multi-agent coordination in V1. LangGraph is used for the agent workflow, not as a replacement for the scheduler or policy engine. Adopt Postgres-backed checkpoints before calling the system production-ready.
 
-## 10. Safety Bounds
+## 11. Safety Bounds
 
 ```python
 MAX_FILES_CHANGED = 10
@@ -164,7 +260,7 @@ Additional mandatory controls:
 - Record command, exit code, duration, and redacted output for every tool action.
 - Fail closed when a permission, signature, or idempotency check cannot be verified.
 
-## 11. MVP Success Criteria
+## 12. MVP Success Criteria
 
 - A repeated webhook never creates duplicate jobs, branches, or PRs.
 - The service never changes a Jira status.
@@ -172,13 +268,15 @@ Additional mandatory controls:
 - A P0/P1 policy safely pauses normal work before a mutation.
 - Every draft PR contains validation evidence or an explicit test gap.
 - Restarting the worker resumes or reports work safely from its last checkpoint.
+- A validation failure may enter one bounded LangGraph repair loop, but cannot retry indefinitely or bypass policy.
 
-## 12. Build Order
+## 13. Build Order
 
 1. Implement configuration, SQLite schema, structured logs, and a dry-run CLI.
 2. Add signed Jira intake, event deduplication, manual `Agent Ready` eligibility, and the scheduler.
-3. Implement read-only analysis and structured Jira plan comments.
-4. Add isolated repository execution, configured validation commands, and draft PR handoff.
-5. Add incident pause policy, safe checkpoints, integration tests, and failure/restart tests.
+3. Implement the LangGraph read-only path: `preflight`, `collect_context`, and `make_plan`, with structured output tests.
+4. Add `prepare_worktree`, `implement`, `validate`, and one bounded `repair` route using fake tools in tests.
+5. Add idempotent branch push, draft PR handoff, and structured Jira comments.
+6. Add incident pause policy, safe checkpoints, integration tests, and failure/restart tests.
 
 Only enable real repository writes after dry runs prove the policy, audit, duplicate-event, and pause behavior.

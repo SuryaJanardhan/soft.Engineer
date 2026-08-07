@@ -372,13 +372,13 @@ The workflow is mostly deterministic: intake, policy checks, repository analysis
 
 | Option | Strength | Cost or risk for this project | Decision |
 |---|---|---|---|
-| Custom Python state machine + SQLite | Full control of policy, Jira permissions, idempotency, audit records, and safe pause points | We must implement retries and leases carefully | **Choose for V1** |
-| LangGraph | Useful graph composition, checkpoints, and interrupts around agent steps | Adds an agent-oriented abstraction; does not replace queue policy, idempotency, permission controls, or audit storage | Use only if the model tool loop becomes genuinely branching or iterative |
+| Custom Python state machine + SQLite | Full control of policy, Jira permissions, idempotency, audit records, and safe pause points | We must implement retries and leases carefully | **Choose for job orchestration** |
+| LangGraph | Useful graph composition, checkpoints, interrupts, and controlled repair loops around agent steps | Does not replace queue policy, idempotency, permission controls, or audit storage | **Choose for the agent workflow** |
 | Temporal | Strong durable execution, event history, retries, and long-running workflow support | Requires a Temporal service and replay-safe workflow design, which is disproportionate for one low-volume worker | Revisit for multiple workers, long waits, or high availability requirements |
 | Celery | Mature distributed task queue with brokers and workers | Adds broker and result-backend operations but does not model the full approval, checkpoint, and audit lifecycle | Do not use for V1 |
 | Airflow, Prefect, Dagster | Good for scheduled data pipelines | Poor fit for repository mutation workflows and human review handoff | Do not use |
 
-The chosen V1 uses a normal web framework only for the signed Jira webhook endpoint. It does not need an orchestration framework to receive events. Keep the state machine as plain, tested application code and make every mutation boundary explicit.
+The chosen V1 uses a normal web framework only for the signed Jira webhook endpoint. It does not need an orchestration framework to receive events. Keep the scheduler as plain, tested application code; use LangGraph only after a job is leased, and make every mutation boundary explicit.
 
 ---
 
