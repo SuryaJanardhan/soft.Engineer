@@ -19,15 +19,15 @@ The goal is not to replace engineers. The goal is to reduce the time spent on lo
 - Target work: medium- to low-complexity changes with clear boundaries.
 - The scheduler may automatically select the next eligible task, but it does not decide business priority or urgency on its own.
 - Jira workflow status transitions are performed only by humans. The system may read tickets and add comments, labels, evidence, and PR links, but it must never transition a Jira status.
-- Human approval is required at plan approval, PR approval, and merge time.
+- No human plan-approval step is required for eligible low- to medium-complexity tickets. Human review is required for the draft PR and merge.
 
 ## Operating Model
 
-Jira is the human accountability record. The workflow engine has separate internal execution states, such as `queued`, `analyzing`, `awaiting_plan_approval`, `executing`, `validating`, `paused`, and `failed`. These states explain what the system is doing; they must not be written back as Jira transitions.
+Jira is the human accountability record. The workflow engine has separate internal execution states, such as `queued`, `analyzing`, `executing`, `validating`, `paused`, and `failed`. These states explain what the system is doing; they must not be written back as Jira transitions.
 
 A human makes a ticket eligible by moving it to `Agent Ready`. The scheduler selects from eligible tickets using an explicit policy: priority, age, team ownership, required skills, risk class, and execution capacity. It must reject or defer work that is ambiguous, security-sensitive, blocked, or outside configured repository boundaries.
 
-Active incidents override normal task selection. For P0 incidents, the system pauses before any unsafe mutation and provides context only. For P1 incidents, it may prepare an investigation or impact report but needs explicit approval before creating a draft PR. P2 and lower work follows the normal approval gates.
+Active incidents override normal task selection. For P0 and P1 incidents, the system pauses before any unsafe mutation and provides read-only context only. P2 and lower work follows the normal bounded execution and draft-PR review flow.
 
 ## Not The Goal
 

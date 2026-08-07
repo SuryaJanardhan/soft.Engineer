@@ -4,7 +4,7 @@
 
 The MVP is not a fully autonomous engineering system. It is a durable, policy-driven task-preparation and draft-PR workflow.
 
-It can automatically choose the next eligible task and perform bounded repository work. Humans own Jira status transitions, plan approval, PR approval, merge, and every decision made during an active high-severity incident.
+It can automatically choose the next eligible task and perform bounded repository work. Humans own Jira status transitions, draft-PR review, merge, and every decision made during an active high-severity incident. Eligible low- to medium-complexity tickets do not wait for plan approval.
 
 The previous idea of "no queues and no databases" is not compatible with automatic selection, webhook retries, pause/resume, or auditability. The smallest credible MVP uses SQLite as durable state and a single worker process. That is deliberately simple, but not disposable.
 
@@ -32,8 +32,6 @@ Create a leased internal job in SQLite
         ↓
 Analyze live repository context and publish plan comment
         ↓
-Human changes Jira status to “Plan Approved”
-        ↓
 Create isolated worktree, make bounded edits, run validation
         ↓
 Create draft PR and publish result comment
@@ -47,8 +45,8 @@ The scheduler checks Jira only as a source of human lifecycle decisions. Its own
 
 | Owner | State | Meaning |
 |---|---|---|
-| Human in Jira | `Backlog`, `Agent Ready`, `Plan Review`, `Plan Approved`, `PR Review`, `Done`, `Blocked` | Accountability and delivery lifecycle |
-| Workflow engine | `queued`, `analyzing`, `awaiting_plan_approval`, `executing`, `validating`, `awaiting_pr_review`, `paused`, `failed`, `completed` | Durable technical execution state |
+| Human in Jira | `Backlog`, `Agent Ready`, `PR Review`, `Done`, `Blocked` | Accountability and delivery lifecycle |
+| Workflow engine | `queued`, `analyzing`, `executing`, `validating`, `awaiting_pr_review`, `paused`, `failed`, `completed` | Durable technical execution state |
 
 The service may write a structured Jira comment such as “plan ready”, “validation failed”, or “draft PR created.” A comment is evidence; it is not a lifecycle transition.
 
@@ -64,8 +62,8 @@ The queue contains only `Agent Ready` tickets. Selection is deterministic and co
 | Condition | Automation behavior |
 |---|---|
 | P0 active | Do not execute or push changes. Pause jobs at safe checkpoints, notify the incident owner, and provide read-only context only. |
-| P1 active | Pause normal queued jobs. Analysis may run, but no branch, edit, commit, or PR occurs without explicit human plan approval. |
-| P2 | Normal workflow is allowed after human plan approval. |
+| P1 active | Pause normal queued jobs. Analysis may run, but no branch, edit, commit, or PR occurs. |
+| P2 | Normal workflow is allowed when no P0/P1 policy blocks it. |
 | P3/P4 | Eligible for automatic selection when capacity exists. |
 
 Pausing is cooperative. A worker checks for a pause before editing, committing, pushing, or opening a PR. It saves a checkpoint rather than being killed mid-write. Humans decide whether a paused job resumes or is cancelled.
@@ -96,7 +94,7 @@ Pausing is cooperative. A worker checks for a pause before editing, committing, 
 
 - Uses live repository search, code ownership, recent diffs, tests, and linked documentation.
 - Produces a structured plan: target files, expected behavior, risks, test commands, assumptions, and rollback approach.
-- Posts the plan as a Jira comment and waits for the human Jira status `Plan Approved`.
+- Posts the plan as a Jira comment for traceability, then continues automatically when the ticket remains eligible.
 
 ### Isolated executor and validator
 
@@ -180,8 +178,7 @@ Additional mandatory controls:
 1. Implement configuration, SQLite schema, structured logs, and a dry-run CLI.
 2. Add signed Jira intake, event deduplication, manual `Agent Ready` eligibility, and the scheduler.
 3. Implement read-only analysis and structured Jira plan comments.
-4. Add human status observation for `Plan Approved`; do not implement any Jira transition endpoint.
-5. Add isolated repository execution, configured validation commands, and draft PR handoff.
-6. Add incident pause policy, safe checkpoints, integration tests, and failure/restart tests.
+4. Add isolated repository execution, configured validation commands, and draft PR handoff.
+5. Add incident pause policy, safe checkpoints, integration tests, and failure/restart tests.
 
 Only enable real repository writes after dry runs prove the policy, audit, duplicate-event, and pause behavior.

@@ -366,6 +366,20 @@ This document compares frameworks, tools, and architecture patterns for building
 
 **Recommendation:** Start with an explicit state machine plus **SQLite-backed durable job state** for V1. A stateless synchronous loop is not sufficient when webhooks are retried, tasks are automatically selected, or work must pause for an incident. Move to Temporal when multiple workers, long-running jobs, or higher throughput justify the operational cost.
 
+### Framework Decision for This Workflow
+
+The workflow is mostly deterministic: intake, policy checks, repository analysis, bounded execution, validation, and a draft PR. The LLM is a component inside analysis and execution, not the workflow controller. That makes a small explicit state machine the best fit for V1.
+
+| Option | Strength | Cost or risk for this project | Decision |
+|---|---|---|---|
+| Custom Python state machine + SQLite | Full control of policy, Jira permissions, idempotency, audit records, and safe pause points | We must implement retries and leases carefully | **Choose for V1** |
+| LangGraph | Useful graph composition, checkpoints, and interrupts around agent steps | Adds an agent-oriented abstraction; does not replace queue policy, idempotency, permission controls, or audit storage | Use only if the model tool loop becomes genuinely branching or iterative |
+| Temporal | Strong durable execution, event history, retries, and long-running workflow support | Requires a Temporal service and replay-safe workflow design, which is disproportionate for one low-volume worker | Revisit for multiple workers, long waits, or high availability requirements |
+| Celery | Mature distributed task queue with brokers and workers | Adds broker and result-backend operations but does not model the full approval, checkpoint, and audit lifecycle | Do not use for V1 |
+| Airflow, Prefect, Dagster | Good for scheduled data pipelines | Poor fit for repository mutation workflows and human review handoff | Do not use |
+
+The chosen V1 uses a normal web framework only for the signed Jira webhook endpoint. It does not need an orchestration framework to receive events. Keep the state machine as plain, tested application code and make every mutation boundary explicit.
+
 ---
 
 ## 6. Production Observability & Logging
@@ -453,7 +467,7 @@ This document compares frameworks, tools, and architecture patterns for building
 │  - Deterministic eligibility, priority, and incident policy │
 │  - Risk assessment & scope validation                       │
 │  - Implementation plan generation                           │
-│  - Human-controlled Jira status approval gate               │
+│  - Human-only Jira status policy and PR review handoff      │
 └─────────────────────────────────────────────────────────────┘
                            ↑↓
 ┌─────────────────────────────────────────────────────────────┐

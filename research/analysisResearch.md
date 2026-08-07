@@ -187,8 +187,8 @@ Maintain two separate state models:
 
 | State owner | Purpose | Examples |
 |---|---|---|
-| Human in Jira | Accountability and lifecycle | `Backlog`, `Agent Ready`, `Plan Review`, `PR Review`, `Done`, `Blocked` |
-| Workflow engine | Durable execution progress | `queued`, `analyzing`, `awaiting_plan_approval`, `executing`, `validating`, `paused`, `failed` |
+| Human in Jira | Accountability and lifecycle | `Backlog`, `Agent Ready`, `PR Review`, `Done`, `Blocked` |
+| Workflow engine | Durable execution progress | `queued`, `analyzing`, `executing`, `validating`, `paused`, `failed` |
 
 The agent has no Jira transition permission. It may add a structured comment with its plan, risk assessment, validation result, or PR link. A human performs every Jira status transition.
 
@@ -199,8 +199,8 @@ An active incident changes scheduling behavior but must not turn the agent into 
 | Severity | System behavior |
 |---|---|
 | P0 | Stop queued work and pause running jobs before an edit, push, or other mutation. Gather read-only context and notify the incident owner. |
-| P1 | Pause normal execution. Prepare an impact report or proposed plan. Require explicit human approval before a draft PR. |
-| P2 | Permit normal workflow only after the normal plan gate and only when no P0/P1 policy blocks it. |
+| P1 | Pause normal execution. Prepare an impact report or proposed plan, but do not create a branch, edit, commit, or PR. |
+| P2 | Permit normal workflow when no P0/P1 policy blocks it. |
 | P3/P4 | Eligible for automatic selection when capacity is available. |
 
 Pause must be cooperative and checkpointed. Do not terminate a process in the middle of a file write, commit, or push. A human decides whether a paused task is resumed or cancelled.
@@ -219,7 +219,7 @@ Recommendation: use a small number of specialized stages, not a large swarm.
 - Fully autonomous: faster, but unsafe for shared production code because the failure cost is too high.
 - Human-gated: slower, but it keeps accountability and catches ambiguity before merge.
 
-Recommendation: human approval at plan and PR stages for all non-trivial tasks.
+Recommendation: for explicitly eligible low- to medium-complexity tickets, remove the plan-approval wait and keep the human gate at draft-PR review and merge. Escalate instead of executing when the ticket is ambiguous, risky, or outside policy.
 
 ### Free-form editing vs bounded patching
 
