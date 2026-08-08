@@ -16,14 +16,23 @@ def evaluate_validation(results: list[dict[str, object]], diff_summary: str) -> 
 
 
 def validate_node(state: dict[str, object], services: WorkflowServices) -> dict[str, object]:
+    job_id = str(state["job_id"])
     results = run_configured_checks(state["plan"], services)
     validation = evaluate_validation(results, collect_diff(state["changes"]))
+    services.store.record_state_snapshot(
+        job_id=job_id,
+        node_name="validate",
+        previous_state="implement",
+        next_state="checker" if validation["passed"] else ("repair" if int(state.get("repair_attempts", 0)) < services.config.max_repair_attempts else "stop"),
+        payload={"validation": validation},
+    )
     return {"validation": validation}
 
 
 def route_after_validation(state: dict[str, object], services: WorkflowServices) -> str:
     if state["validation"]["passed"]:
-        return "create_draft_pr"
+        return "checker"
     if int(state.get("repair_attempts", 0)) < services.config.max_repair_attempts:
         return "repair"
     return "stop"
+

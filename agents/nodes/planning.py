@@ -23,14 +23,23 @@ def check_plan_scope(plan: dict[str, object], services: WorkflowServices) -> str
 
 
 def make_plan_node(state: dict[str, object], services: WorkflowServices) -> dict[str, object]:
+    job_id = str(state["job_id"])
     plan = call_model_structured(state["ticket"], state["context"], services)
     if not validate_plan_schema(plan):
-        return {"stop_reason": "Model returned an invalid plan"}
+        result = {"stop_reason": "Model returned an invalid plan"}
+        services.store.record_state_snapshot(job_id, "make_plan", "collect_context", "stop", result)
+        return result
+
     scope_failure = check_plan_scope(plan, services)
     if scope_failure:
-        return {"stop_reason": scope_failure}
+        result = {"stop_reason": scope_failure}
+        services.store.record_state_snapshot(job_id, "make_plan", "collect_context", "stop", result)
+        return result
+
+    services.store.record_state_snapshot(job_id, "make_plan", "collect_context", "executive", {"plan": plan})
     return {"plan": plan}
 
 
 def route_after_plan(state: dict[str, object]) -> str:
-    return "stop" if state.get("stop_reason") else "prepare_worktree"
+    return "stop" if state.get("stop_reason") else "executive"
+
