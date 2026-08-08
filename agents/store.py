@@ -46,6 +46,15 @@ class JobStore:
                     outcome TEXT NOT NULL,
                     occurred_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS state_snapshots (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_id TEXT NOT NULL,
+                    node_name TEXT NOT NULL,
+                    previous_state TEXT NOT NULL,
+                    next_state TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
                 """
             )
 
@@ -63,10 +72,12 @@ class JobStore:
         ticket_json = json.dumps(ticket.__dict__)
         with self._connect() as connection:
             connection.execute(
-                "INSERT INTO jobs(job_id, ticket_json, state, incident_severity) VALUES (?, ?, ?, ?)",
+                "INSERT OR REPLACE INTO jobs(job_id, ticket_json, state, incident_severity, lease_owner, branch_name, pr_url) "
+                "VALUES (?, ?, ?, ?, NULL, NULL, NULL)",
                 (job_id, ticket_json, "queued", incident_severity),
             )
         self.record_audit_event(job_id, "job_created", "queued")
+
 
     def acquire_lease(self, job_id: str, worker_id: str) -> bool:
         with self._connect() as connection:
@@ -107,6 +118,42 @@ class JobStore:
             )
         LOGGER.info("Agent action=%s outcome=%s job_id=%s", action, outcome, job_id)
 
+    def record_state_snapshot(
+        self,
+        job_id: str,
+        node_name: str,
+        previous_state: str,
+        next_state: str,
+        payload: dict[str, object],
+    ) -> None:
+        payload_json = json.dumps(payload, default=str)
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO state_snapshots(job_id, node_name, previous_state, next_state, payload_json, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (job_id, node_name, previous_state, next_state, payload_json, self._now()),
+            )
+        LOGGER.info("State snapshot saved node=%s job_id=%s", node_name, job_id)
+
+    def get_snapshots(self, job_id: str) -> list[dict[str, object]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM state_snapshots WHERE job_id = ? ORDER BY id ASC",
+                (job_id,),
+            ).fetchall()
+        return [
+            {
+                "id": row["id"],
+                "node_name": row["node_name"],
+                "previous_state": row["previous_state"],
+                "next_state": row["next_state"],
+                "payload": json.loads(row["payload_json"]),
+                "created_at": row["created_at"],
+            }
+            for row in rows
+        ]
+
     @staticmethod
     def _now() -> str:
         return datetime.now(UTC).isoformat()
+

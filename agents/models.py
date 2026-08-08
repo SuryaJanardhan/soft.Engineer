@@ -24,13 +24,19 @@ class AgentState(TypedDict, total=False):
     incident_severity: str | None
     policy: dict[str, str | bool | None]
     repository_ref: str
+    intake_data: dict[str, object]
+    memory_id: str
     context: dict[str, object]
     plan: dict[str, object]
+    allocated_tasks: list[dict[str, str]]
     worktree_path: str
     branch_name: str
     changes: list[dict[str, str]]
     validation: dict[str, object]
     repair_attempts: int
+    checker_results: dict[str, object]
     pr_url: str
+    notification_status: dict[str, object]
     stop_reason: str
     final_state: str
+

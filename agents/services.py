@@ -8,6 +8,9 @@ from agents.repository import DemoRepository
 from agents.store import JobStore
 
 
+from agents.notifier import NotificationService
+
+
 @dataclass
 class WorkflowServices:
     config: WorkflowConfig
@@ -16,3 +19,5 @@ class WorkflowServices:
     model: PlanningModel
     knowledge_base: KnowledgeBase | None = None
     jira_client: JiraClient | None = None
+    notifier: NotificationService | None = None
+

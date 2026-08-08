@@ -55,3 +55,17 @@ class KnowledgeBaseSettings:
             repository_url=repository_url or None,
             repository_name=os.getenv("CORE_REPOSITORY_NAME", "demo/repository"),
         )
+
+
+@dataclass(frozen=True)
+class NotificationSettings:
+    slack_webhook_url: str
+    notification_email: str
+
+    @classmethod
+    def from_environment(cls) -> "NotificationSettings":
+        return cls(
+            slack_webhook_url=os.getenv("SLACK_WEBHOOK_URL", ""),
+            notification_email=os.getenv("NOTIFICATION_EMAIL", "team@example.com"),
+        )
+
