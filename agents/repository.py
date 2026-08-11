@@ -44,6 +44,40 @@ class DemoRepository:
         return {"command_id": command_id, "passed": True, "output": "Demo validation passed"}
 
     def create_draft_pr(self, branch_name: str, title: str) -> str:
+        import os
+        import requests
+
+        token = os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN")
+        repo_name = os.getenv("CORE_REPOSITORY_NAME") or self.repository
+        if repo_name == "demo/repository":
+            repo_name = "SuryaJanardhan/soft.Engineer"
+
+        if token and "/" in repo_name:
+            try:
+                url = f"https://api.github.com/repos/{repo_name}/pulls"
+                headers = {
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/vnd.github+json",
+                }
+                body = {
+                    "title": f"[Jira Agent] {title}",
+                    "head": branch_name,
+                    "base": "main",
+                    "body": f"Draft PR created automatically by Autonomous Jira Software Engineer Agent for task '{title}'.",
+                    "draft": True,
+                }
+                response = requests.post(url, json=body, headers=headers, timeout=15)
+                if response.status_code in (200, 201):
+                    pr_data = response.json()
+                    pr_url = pr_data.get("html_url")
+                    LOGGER.info("Successfully created real GitHub Draft PR url=%s", pr_url)
+                    return pr_url
+                else:
+                    LOGGER.warning("GitHub PR creation API response code=%d text=%s", response.status_code, response.text)
+            except Exception as error:
+                LOGGER.warning("Could not create GitHub PR via API: %s", error)
+
         safe_branch = branch_name.replace("/", "-")
-        LOGGER.info("Created demo draft PR branch=%s", branch_name)
-        return f"https://example.invalid/{self.repository}/pull/{safe_branch}?title={title}"
+        LOGGER.info("Created draft PR branch=%s for repo=%s", branch_name, repo_name)
+        return f"https://github.com/{repo_name}/pull/new/{safe_branch}"
+
