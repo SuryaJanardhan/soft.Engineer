@@ -96,3 +96,23 @@ Acceptance criteria:
 - Add a focused unit test.
 - Do not change authentication, deployment, or billing code.
 ```
+
+## System Architecture Diagram
+
+```mermaid
+graph TD
+    A[Jira Webhook / Intake Event] --> B[Agent 1: Task Intake Agent]
+    B --> C[Agent 2: Database & Shared Memory Agent]
+    C --> D[Context Collector & Knowledge Base]
+    D --> E[Agent 3: Structured Planner Agent]
+    E --> F[Executive / Orchestrator Agent]
+    F --> G[Workspace Sandbox Isolation]
+    G --> H[Coder Agent: Apply Bounded Modifications]
+    H --> I[Testing Agent: Run Verification Checks]
+    I -->|Tests Fail & Retries Available| J[Repair Agent: Bounded Retry Loop]
+    J --> H
+    I -->|Tests Pass| K[Final Checker Agent: Audit & Lint Verification]
+    K --> L[Draft PR Handoff Agent]
+    L --> M[Notification Agent: Dispatch Email Alert]
+    M --> N[End Action Pipeline]
+```
