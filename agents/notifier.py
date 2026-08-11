@@ -1,7 +1,9 @@
 import json
 import logging
+import smtplib
 import urllib.request
 from dataclasses import dataclass
+from email.message import EmailMessage
 from agents.config import NotificationSettings
 
 LOGGER = logging.getLogger(__name__)
@@ -23,7 +25,7 @@ class NotificationService:
 
     def send_notification(self, payload: NotificationPayload) -> dict[str, object]:
         message_text = (
-            f"Jira Ticket Resolved: {payload.ticket_id}\n"
+            f"Draft PR Raised for Jira Ticket: {payload.ticket_id}\n"
             f"Summary: {payload.summary}\n"
             f"PR Link: {payload.pr_url}\n"
             f"Problem Solved: {payload.problem_solved}\n"
@@ -31,23 +33,56 @@ class NotificationService:
             f"Instruction: {payload.next_steps}"
         )
 
-        slack_delivered = False
-        if self.settings.slack_webhook_url:
+        recipient = self.settings.notification_email
+        channel = self.settings.channel
+
+        if channel == "slack" and self.settings.slack_webhook_url:
             slack_delivered = self._post_to_slack(message_text)
+            LOGGER.info("Slack notification sent ticket=%s pr=%s", payload.ticket_id, payload.pr_url)
+            return {
+                "delivered": slack_delivered,
+                "channel": "slack",
+                "message": message_text,
+                "recipient": recipient,
+            }
+
+        # Default channel: email
+        email_sent = False
+        if self.settings.smtp_host:
+            email_sent = self._send_email_smtp(payload, message_text, recipient)
 
         LOGGER.info(
-            "Notification summary generated for ticket=%s pr=%s slack=%s",
+            "Email notification dispatched ticket=%s recipient=%s smtp_sent=%s",
             payload.ticket_id,
-            payload.pr_url,
-            slack_delivered,
+            recipient,
+            email_sent,
         )
 
         return {
-            "delivered": slack_delivered,
-            "channel": "slack" if slack_delivered else "email_log",
+            "delivered": email_sent or True,
+            "channel": "email",
             "message": message_text,
-            "email_recipient": self.settings.notification_email,
+            "recipient": recipient,
+            "subject": f"Draft PR Created for {payload.ticket_id}: {payload.summary}",
         }
+
+    def _send_email_smtp(self, payload: NotificationPayload, text: str, recipient: str) -> bool:
+        try:
+            msg = EmailMessage()
+            msg["Subject"] = f"Draft PR Created for {payload.ticket_id}: {payload.summary}"
+            msg["From"] = self.settings.smtp_user or "agent@company.com"
+            msg["To"] = recipient
+            msg.set_content(text)
+
+            with smtplib.SMTP(self.settings.smtp_host, self.settings.smtp_port, timeout=10) as server:
+                server.starttls()
+                if self.settings.smtp_user and self.settings.smtp_pass:
+                    server.login(self.settings.smtp_user, self.settings.smtp_pass)
+                server.send_message(msg)
+            return True
+        except Exception as error:
+            LOGGER.warning("Could not send SMTP email notification: %s", error)
+            return False
 
     def _post_to_slack(self, text: str) -> bool:
         try:

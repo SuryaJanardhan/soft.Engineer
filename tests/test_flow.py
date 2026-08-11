@@ -18,8 +18,18 @@ def test_services(tmp_path: Path) -> WorkflowServices:
     store = JobStore(db_path)
     config = WorkflowConfig()
     repository = DemoRepository()
+    notifier = NotificationService(
+        NotificationSettings(
+            channel="email",
+            notification_email="test@example.com",
+            slack_webhook_url="",
+            smtp_host="",
+            smtp_port=587,
+            smtp_user="",
+            smtp_pass="",
+        )
+    )
     model = DeterministicPlanningModel()
-    notifier = NotificationService(NotificationSettings("", "test@example.com"))
     return WorkflowServices(
         config=config,
         store=store,

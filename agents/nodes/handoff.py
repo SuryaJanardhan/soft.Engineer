@@ -26,7 +26,12 @@ def create_draft_pr_node(state: dict[str, object], services: WorkflowServices) -
     )
     post_jira_comment(job_id, f"Draft PR created: {pr_url}", services)
     if services.jira_client is not None:
-        services.jira_client.add_comment(str(state["ticket"]["ticket_id"]), f"Draft PR created: {pr_url}")
+        try:
+            services.jira_client.add_comment(str(state["ticket"]["ticket_id"]), f"Draft PR created: {pr_url}")
+        except Exception as error:
+            import logging
+            logging.getLogger(__name__).warning("Could not post Jira comment: %s", error)
+
     if services.knowledge_base is not None:
         services.knowledge_base.record_fix(
             repository=str(state["ticket"]["repository"]),

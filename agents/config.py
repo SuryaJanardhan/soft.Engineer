@@ -59,13 +59,31 @@ class KnowledgeBaseSettings:
 
 @dataclass(frozen=True)
 class NotificationSettings:
-    slack_webhook_url: str
+    channel: str
     notification_email: str
+    slack_webhook_url: str
+    smtp_host: str
+    smtp_port: int
+    smtp_user: str
+    smtp_pass: str
 
     @classmethod
     def from_environment(cls) -> "NotificationSettings":
+        email_default = os.getenv("NOTIFICATION_EMAIL") or os.getenv("JIRA_EMAIL", "team@example.com")
+        smtp_port_str = os.getenv("SMTP_PORT", "587")
+        try:
+            smtp_port = int(smtp_port_str)
+        except ValueError:
+            smtp_port = 587
+
         return cls(
+            channel=os.getenv("NOTIFICATION_CHANNEL", "email").lower(),
+            notification_email=email_default,
             slack_webhook_url=os.getenv("SLACK_WEBHOOK_URL", ""),
-            notification_email=os.getenv("NOTIFICATION_EMAIL", "team@example.com"),
+            smtp_host=os.getenv("SMTP_HOST", ""),
+            smtp_port=smtp_port,
+            smtp_user=os.getenv("SMTP_USER", ""),
+            smtp_pass=os.getenv("SMTP_PASS", ""),
         )
+
 
