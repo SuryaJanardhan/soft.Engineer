@@ -6,12 +6,12 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from agents.config import JiraSettings, KnowledgeBaseSettings, NotificationSettings, WorkflowConfig
+from agents.config import GroqSettings, JiraSettings, KnowledgeBaseSettings, NotificationSettings, WorkflowConfig
 from agents.graph import build_agent_graph
 from agents.indexer import index_core_repository
 from agents.jira import JiraClient
 from agents.knowledge import KnowledgeBase
-from agents.model import DeterministicPlanningModel
+from agents.model import DeterministicPlanningModel, GroqPlanningModel
 from agents.models import Ticket
 from agents.notifier import NotificationService
 from agents.repository import DemoRepository
@@ -41,15 +41,18 @@ def run_agent_job(job_id: str, services: WorkflowServices, worker_id: str = "loc
 def build_demo_services(database_path: Path, jira_client: JiraClient | None = None) -> WorkflowServices:
     notification_settings = NotificationSettings.from_environment()
     notifier = NotificationService(notification_settings)
+    groq_settings = GroqSettings.from_environment()
+    model = GroqPlanningModel(groq_settings)
     return WorkflowServices(
         config=WorkflowConfig(),
         store=JobStore(database_path),
         repository=DemoRepository(),
-        model=DeterministicPlanningModel(),
+        model=model,
         knowledge_base=KnowledgeBase(database_path.with_name("knowledge.db")),
         jira_client=jira_client,
         notifier=notifier,
     )
+
 
 
 def main() -> int:

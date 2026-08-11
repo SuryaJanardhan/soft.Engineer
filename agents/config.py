@@ -87,3 +87,34 @@ class NotificationSettings:
         )
 
 
+@dataclass(frozen=True)
+class GroqSettings:
+    api_keys: tuple[str, ...]
+    model_name: str
+
+    @classmethod
+    def from_environment(cls) -> "GroqSettings":
+        keys: list[str] = []
+        key1 = os.getenv("GROQ_API_KEY_1", "").strip()
+        key2 = os.getenv("GROQ_API_KEY_2", "").strip()
+        single_key = os.getenv("GROQ_API_KEY", "").strip()
+
+        if key1:
+            keys.append(key1)
+        if key2:
+            keys.append(key2)
+        if single_key and single_key not in keys:
+            keys.append(single_key)
+
+        raw_keys = os.getenv("GROQ_API_KEYS", "")
+        if raw_keys:
+            for k in raw_keys.split(","):
+                k_clean = k.strip()
+                if k_clean and k_clean not in keys:
+                    keys.append(k_clean)
+
+        model_name = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+        return cls(api_keys=tuple(keys), model_name=model_name)
+
+
+
