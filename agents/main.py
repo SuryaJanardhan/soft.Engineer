@@ -1,6 +1,7 @@
 import argparse
 import json
 import logging
+import os
 from dataclasses import replace
 from pathlib import Path
 
@@ -96,8 +97,16 @@ def main() -> int:
     )
     if arguments.jira_ticket:
         if jira_client is None:
-            raise RuntimeError("Set JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN, and JIRA_PROJECT_KEY in .env")
+            missing = [
+                key for key in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_API_TOKEN", "JIRA_PROJECT_KEY")
+                if not os.getenv(key)
+            ]
+            raise RuntimeError(
+                f"Missing required Jira environment secrets: {', '.join(missing)}. "
+                "Please configure them in your GitHub Repository Secrets or .env file."
+            )
         ticket = jira_client.get_ticket(arguments.jira_ticket)
+
         ticket = replace(ticket, repository=knowledge_settings.repository_name)
     job_id = f"job-{ticket.ticket_id.lower()}"
     services.store.create_job(job_id, ticket, arguments.incident)
