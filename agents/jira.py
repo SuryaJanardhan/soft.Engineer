@@ -60,6 +60,28 @@ class JiraClient:
         response.raise_for_status()
         LOGGER.info("Added Jira evidence comment ticket_id=%s", ticket_id)
 
+    def create_issue(self, summary: str, description: str, priority_name: str = "Low", issue_type: str = "Task") -> str:
+        body = {
+            "fields": {
+                "project": {"key": self.settings.project_key},
+                "summary": summary,
+                "description": self._text_to_adf(description),
+                "issuetype": {"name": issue_type},
+                "priority": {"name": priority_name},
+            }
+        }
+        response = self.session.post(
+            f"{self.settings.base_url}/rest/api/3/issue",
+            json=body,
+            timeout=20,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        issue_key = payload["key"]
+        LOGGER.info("Created Jira issue key=%s priority=%s", issue_key, priority_name)
+        return issue_key
+
+
     @staticmethod
     def _description_to_text(value: object) -> str:
         if isinstance(value, str):

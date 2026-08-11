@@ -13,12 +13,19 @@ class DemoRepository:
 
     def collect_context(self, ticket_summary: str) -> dict[str, object]:
         LOGGER.info("Collecting repository context for ticket=%s", ticket_summary)
+        summary_lower = ticket_summary.lower()
+        if "readme" in summary_lower or "architecture" in summary_lower or "diagram" in summary_lower:
+            candidate_files = ["README.md"]
+        else:
+            candidate_files = ["src/example.py", "tests/test_example.py"]
+
         return {
-            "candidate_files": ["src/example.py", "tests/test_example.py"],
+            "candidate_files": candidate_files,
             "owners": ["platform-team"],
             "recent_changes": ["No recent conflicting change found in demo adapter"],
             "test_commands": ["unit_tests"],
         }
+
 
     def create_worktree(self, job_id: str) -> str:
         worktree_path = f"/tmp/soft-engineer/{job_id}"

@@ -3,8 +3,8 @@ from agents.models import PolicyDecision, Ticket
 
 
 def evaluate_ticket(ticket: Ticket, incident_severity: str | None, config: WorkflowConfig) -> PolicyDecision:
-    if ticket.status != "Agent Ready":
-        return PolicyDecision(False, "Ticket is not human-marked as Agent Ready")
+    if ticket.status.lower() in {"closed", "done", "resolved"}:
+        return PolicyDecision(False, "Ticket is already closed or completed")
     if ticket.repository not in config.allowed_repositories:
         return PolicyDecision(False, "Repository is not allowed")
     if ticket.priority not in {"P2", "P3", "P4"}:
