@@ -5,8 +5,21 @@ from agents.services import WorkflowServices
 
 def intake_node(state: dict[str, object], services: WorkflowServices) -> dict[str, object]:
     job_id = str(state["job_id"])
-    ticket = Ticket(**state["ticket"])
+    ticket_data = state.get("ticket")
     incident_severity = state.get("incident_severity")
+
+    if not ticket_data:
+        job = services.store.get_job(job_id)
+        if job:
+            ticket_data = job.get("ticket", {})
+            incident_severity = incident_severity or job.get("incident_severity")
+
+    if isinstance(ticket_data, dict):
+        ticket = Ticket(**ticket_data)
+    elif isinstance(ticket_data, Ticket):
+        ticket = ticket_data
+    else:
+        ticket = Ticket("UNKNOWN", "Missing ticket data", "", "P3", "Agent Ready", "demo/repository")
 
     decision = evaluate_ticket(ticket, incident_severity, services.config)
     if should_pause(incident_severity):
