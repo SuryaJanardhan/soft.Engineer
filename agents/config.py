@@ -5,7 +5,14 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class WorkflowConfig:
-    allowed_repositories: tuple[str, ...] = ("demo/repository",)
+    allowed_repositories: tuple[str, ...] = field(
+        default_factory=lambda: (
+            os.getenv("CORE_REPOSITORY_NAME", "SuryaJanardhan/Flashes"),
+            "SuryaJanardhan/Flashes",
+            "SuryaJanardhan/soft.Engineer",
+            "demo/repository",
+        )
+    )
     blocked_path_fragments: tuple[str, ...] = (
         ".env",
         "secrets",

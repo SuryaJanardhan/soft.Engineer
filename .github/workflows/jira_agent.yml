@@ -57,7 +57,7 @@ jobs:
           GROQ_API_KEY_1: ${{ secrets.GROQ_API_KEY_1 }}
           GROQ_API_KEY_2: ${{ secrets.GROQ_API_KEY_2 }}
           GROQ_MODEL: llama-3.3-70b-versatile
-          CORE_REPOSITORY_NAME: ${{ secrets.CORE_REPOSITORY_NAME || github.repository }}
+          CORE_REPOSITORY_NAME: ${{ secrets.CORE_REPOSITORY_NAME || 'SuryaJanardhan/Flashes' }}
           CORE_REPOSITORY_PATH: '.'
           NOTIFICATION_CHANNEL: email
           NOTIFICATION_EMAIL: ${{ secrets.NOTIFICATION_EMAIL }}
