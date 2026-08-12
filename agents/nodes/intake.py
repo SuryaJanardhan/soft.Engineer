@@ -35,6 +35,7 @@ def intake_node(state: dict[str, object], services: WorkflowServices) -> dict[st
     }
 
     result = {
+        "ticket": ticket.__dict__ if hasattr(ticket, "__dict__") else ticket,
         "intake_data": intake_data,
         "policy": {"allowed": decision.allowed, "reason": decision.reason},
     }
