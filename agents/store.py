@@ -102,6 +102,12 @@ class JobStore:
             "state": row["state"],
         }
 
+    def get_job(self, job_id: str) -> dict[str, object] | None:
+        try:
+            return self.load_job(job_id)
+        except KeyError:
+            return None
+
     def finish_job(self, job_id: str, state: str, branch_name: str | None = None, pr_url: str | None = None) -> None:
         with self._connect() as connection:
             connection.execute(
