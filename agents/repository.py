@@ -86,7 +86,11 @@ class GitRepository:
             subprocess.run(["git", "checkout", "-B", branch_name], check=False)
             subprocess.run(["git", "add", "."], check=False)
             subprocess.run(["git", "commit", "-m", f"fix: {title[:50]}"], check=False)
-            subprocess.run(["git", "push", "-u", "origin", branch_name, "--force"], check=False)
+            if token:
+                remote_url = f"https://x-access-token:{token}@github.com/{repo_name}.git"
+                subprocess.run(["git", "push", remote_url, f"HEAD:{branch_name}", "--force"], check=False)
+            else:
+                subprocess.run(["git", "push", "-u", "origin", branch_name, "--force"], check=False)
             LOGGER.info("Pushed branch %s to origin repository %s", branch_name, repo_name)
         except Exception as error:
             LOGGER.warning("Git branch push warning: %s", error)
