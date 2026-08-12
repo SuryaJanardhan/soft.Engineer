@@ -15,39 +15,31 @@ from agents.knowledge import KnowledgeBase
 from agents.model import DeterministicPlanningModel, GroqPlanningModel
 from agents.models import Ticket
 from agents.notifier import NotificationService
-from agents.repository import DemoRepository
+from agents.repository import GitRepository
 from agents.services import WorkflowServices
 from agents.store import JobStore
 
 
 def configure_logging() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
 
-def run_agent_job(job_id: str, services: WorkflowServices, worker_id: str = "local-worker") -> dict[str, object]:
-    if not services.store.acquire_lease(job_id, worker_id):
-        raise RuntimeError(f"Could not lease job: {job_id}")
-    state = services.store.load_job(job_id)
+def run_agent_job(job_id: str, services: WorkflowServices) -> dict[str, object]:
     graph = build_agent_graph(services)
-    result = graph.invoke({**state, "repair_attempts": 0})
-    services.store.finish_job(
-        job_id,
-        str(result["final_state"]),
-        result.get("branch_name"),
-        result.get("pr_url"),
-    )
-    return result
+    return graph.invoke({"job_id": job_id})
 
 
-def build_demo_services(database_path: Path, jira_client: JiraClient | None = None) -> WorkflowServices:
+def build_production_services(database_path: Path, jira_client: JiraClient | None = None) -> WorkflowServices:
     notification_settings = NotificationSettings.from_environment()
     notifier = NotificationService(notification_settings)
     groq_settings = GroqSettings.from_environment()
     model = GroqPlanningModel(groq_settings)
+    kb_settings = KnowledgeBaseSettings.from_environment()
+
     return WorkflowServices(
         config=WorkflowConfig(),
         store=JobStore(database_path),
-        repository=DemoRepository(),
+        repository=GitRepository(repository=kb_settings.repository_name),
         model=model,
         knowledge_base=KnowledgeBase(database_path.with_name("knowledge.db")),
         jira_client=jira_client,
@@ -55,14 +47,17 @@ def build_demo_services(database_path: Path, jira_client: JiraClient | None = No
     )
 
 
+# Alias for backward compatibility
+build_demo_services = build_production_services
+
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run the bounded agent MVP in demo mode")
-    parser.add_argument("--ticket", default="ENG-101")
+    parser = argparse.ArgumentParser(description="Run the Production Autonomous Jira Software Engineer Agent")
+    parser.add_argument("--ticket", default="KAN-1")
     parser.add_argument("--priority", default="P3")
     parser.add_argument("--incident", choices=["P0", "P1", "P2"])
     parser.add_argument("--database", type=Path, default=Path(".runtime/agent.db"))
-    parser.add_argument("--jira-ticket", help="Fetch a real Jira Cloud issue instead of using demo ticket data")
+    parser.add_argument("--jira-ticket", help="Fetch a real Jira Cloud issue to process")
     parser.add_argument("--index-repository", action="store_true", help="Build the local code knowledge graph")
     parser.add_argument("--record-fix-outcome", help="Record a human-reviewed fix outcome for a Jira ticket")
     parser.add_argument("--outcome", choices=["merged", "rejected", "reverted"])
@@ -70,6 +65,7 @@ def main() -> int:
 
     load_dotenv()
     configure_logging()
+
     if arguments.index_repository:
         indexed_nodes = index_core_repository(KnowledgeBaseSettings.from_environment())
         print(f"Indexed {indexed_nodes} code-graph nodes")
@@ -86,15 +82,18 @@ def main() -> int:
 
     jira_settings = JiraSettings.from_environment()
     jira_client = JiraClient.from_settings(jira_settings) if jira_settings else None
-    services = build_demo_services(arguments.database, jira_client=jira_client)
+
+    services = build_production_services(arguments.database, jira_client=jira_client)
+
     ticket = Ticket(
         ticket_id=arguments.ticket,
-        summary="Update a bounded demo component",
-        description="Make a small, testable change in the demo repository.",
+        summary="Autonomous production ticket task",
+        description="Execute production software engineering task.",
         priority=arguments.priority,
         status="Agent Ready",
-        repository="demo/repository",
+        repository=knowledge_settings.repository_name,
     )
+
     if arguments.jira_ticket:
         if jira_client is None:
             missing = [
@@ -106,8 +105,8 @@ def main() -> int:
                 "Please configure them in your GitHub Repository Secrets or .env file."
             )
         ticket = jira_client.get_ticket(arguments.jira_ticket)
-
         ticket = replace(ticket, repository=knowledge_settings.repository_name)
+
     job_id = f"job-{ticket.ticket_id.lower()}"
     services.store.create_job(job_id, ticket, arguments.incident)
     result = run_agent_job(job_id, services)
