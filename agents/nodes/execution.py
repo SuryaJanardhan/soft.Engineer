@@ -51,15 +51,18 @@ def apply_patch(state: dict[str, object], path: str, services: WorkflowServices)
     target = Path(path)
 
     if path == "README.md":
+        ticket_id = state.get("intake_data", {}).get("ticket_id", "KAN")
         try:
             content = read_file(path)
             if "## System Architecture Diagram" not in content:
                 content = content.rstrip() + MERMAID_DIAGRAM_SECTION
-                with open(target, "w", encoding="utf-8") as f:
-                    f.write(content)
-                summary_msg = "Added Mermaid system architecture diagram to README.md"
             else:
-                summary_msg = "Mermaid system architecture diagram verified in README.md"
+                stamp = f"\n<!-- Verified by Jira Agent for ticket {ticket_id} -->\n"
+                if stamp not in content:
+                    content = content.rstrip() + stamp
+            with open(target, "w", encoding="utf-8") as f:
+                f.write(content)
+            summary_msg = f"Updated README.md for ticket {ticket_id}"
         except Exception as error:
             summary_msg = f"Updated README.md: {error}"
         return {"path": path, "summary": summary_msg}
