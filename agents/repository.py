@@ -32,7 +32,7 @@ class GitRepository:
         if not candidate_files:
             candidate_files = ["README.md", "agents/main.py", "tests/test_flow.py"]
 
-        existing_files = [f for f in candidate_files if Path(f).exists()]
+        existing_files = [f for f in candidate_files if Path(f).exists() or f.endswith(".md")]
         if not existing_files:
             existing_files = ["README.md"]
 
