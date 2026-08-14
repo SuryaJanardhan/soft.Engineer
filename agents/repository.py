@@ -1,5 +1,6 @@
 import logging
 import os
+import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -74,28 +75,39 @@ class GitRepository:
 
         return {"command_id": command_id, "passed": True, "output": "Default check passed"}
 
-    def create_draft_pr(self, branch_name: str, title: str) -> str:
+    def create_draft_pr(self, branch_name: str, title: str, changes: list[dict[str, str]] = None) -> str:
         token = os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN") or os.getenv("JIRA_API_TOKEN")
         repo_name = os.getenv("CORE_REPOSITORY_NAME") or self.repository
         if repo_name == "demo/repository":
             repo_name = "SuryaJanardhan/soft.Engineer"
 
+        tmp_dir = f"/tmp/soft-engineer-pr-{branch_name.replace('/', '-')}"
+        if os.path.exists(tmp_dir):
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+        os.makedirs(tmp_dir, exist_ok=True)
+
         try:
-            subprocess.run(["git", "config", "user.name", "jira-agent[bot]"], check=False)
-            subprocess.run(["git", "config", "user.email", "jira-agent@users.noreply.github.com"], check=False)
-            if token and repo_name != "SuryaJanardhan/soft.Engineer":
-                remote_url = f"https://x-access-token:{token}@github.com/{repo_name}.git"
-                subprocess.run(["git", "fetch", remote_url, "main:target-repo-main"], check=False)
-                subprocess.run(["git", "checkout", "-B", branch_name, "target-repo-main"], check=False)
+            remote_url = f"https://x-access-token:{token}@github.com/{repo_name}.git" if token else f"https://github.com/{repo_name}.git"
+            subprocess.run(["git", "clone", "--depth", "1", remote_url, tmp_dir], check=False)
+            subprocess.run(["git", "config", "user.name", "jira-agent[bot]"], cwd=tmp_dir, check=False)
+            subprocess.run(["git", "config", "user.email", "jira-agent@users.noreply.github.com"], cwd=tmp_dir, check=False)
+            subprocess.run(["git", "checkout", "-B", branch_name], cwd=tmp_dir, check=False)
+
+            if changes:
+                for c in changes:
+                    rel_path = str(c.get("path", ""))
+                    if rel_path and os.path.exists(rel_path):
+                        dest = os.path.join(tmp_dir, rel_path)
+                        os.makedirs(os.path.dirname(dest), exist_ok=True)
+                        shutil.copy2(rel_path, dest)
+                        subprocess.run(["git", "add", rel_path], cwd=tmp_dir, check=False)
             else:
-                subprocess.run(["git", "checkout", "-B", branch_name], check=False)
-            subprocess.run(["git", "add", "."], check=False)
-            subprocess.run(["git", "commit", "-m", f"fix: {title[:50]}"], check=False)
-            if token:
-                remote_url = f"https://x-access-token:{token}@github.com/{repo_name}.git"
-                subprocess.run(["git", "push", remote_url, f"HEAD:{branch_name}", "--force"], check=False)
-            else:
-                subprocess.run(["git", "push", "-u", "origin", branch_name, "--force"], check=False)
+                if os.path.exists("README.md"):
+                    shutil.copy2("README.md", os.path.join(tmp_dir, "README.md"))
+                    subprocess.run(["git", "add", "README.md"], cwd=tmp_dir, check=False)
+
+            subprocess.run(["git", "commit", "-m", f"fix: {title[:50]}"], cwd=tmp_dir, check=False)
+            subprocess.run(["git", "push", remote_url, f"HEAD:{branch_name}", "--force"], cwd=tmp_dir, check=False)
             LOGGER.info("Pushed branch %s to origin repository %s", branch_name, repo_name)
         except Exception as error:
             LOGGER.warning("Git branch push warning: %s", error)
