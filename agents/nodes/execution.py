@@ -81,11 +81,28 @@ def apply_patch(state: dict[str, object], path: str, services: WorkflowServices)
 
 
 def agent_tool_loop(state: dict[str, object], services: WorkflowServices) -> list[dict[str, str]]:
-    changes: list[dict[str, str]] = []
-    files = state.get("plan", {}).get("files", [])
-    for path in files:
-        changes.append(apply_patch(state, str(path), services))
-    return changes
+    worktree_path = str(state.get("worktree_path") or os.getcwd())
+    ticket_id = state.get("intake_data", {}).get("ticket_id", "KAN")
+    ticket_summary = state.get("intake_data", {}).get("summary", "Task Execution")
+    ticket_description = state.get("intake_data", {}).get("description", "Execute task")
+    plan_summary = state.get("plan", {}).get("summary", "Apply planned changes")
+    candidate_files = [str(f) for f in state.get("plan", {}).get("files", ["README.md"])]
+
+    try:
+        from agents.openhands_adapter import run_openhands_coder_agent
+        return run_openhands_coder_agent(
+            worktree_path=worktree_path,
+            ticket_id=ticket_id,
+            ticket_summary=ticket_summary,
+            ticket_description=ticket_description,
+            plan_summary=plan_summary,
+            candidate_files=candidate_files,
+        )
+    except Exception as error:
+        changes: list[dict[str, str]] = []
+        for path in candidate_files:
+            changes.append(apply_patch(state, path, services))
+        return changes
 
 
 def implement_node(state: dict[str, object], services: WorkflowServices) -> dict[str, object]:

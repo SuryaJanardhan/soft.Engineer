@@ -4,3 +4,5 @@ __pycache__/
 .pytest_cache/
 .env
 Reference-for-ai
+
+Reference-for-core-tools
