@@ -95,17 +95,22 @@ class GitRepository:
             subprocess.run(["git", "config", "user.email", "jira-agent@users.noreply.github.com"], cwd=tmp_dir, check=False)
             subprocess.run(["git", "checkout", "-B", branch_name], cwd=tmp_dir, check=False)
 
+            worktree_dir = f"/tmp/soft-engineer/job-{branch_name.split('/')[-1]}"
             if changes:
                 for c in changes:
                     rel_path = str(c.get("path", ""))
-                    if rel_path and os.path.exists(rel_path):
+                    if not rel_path:
+                        continue
+                    src = os.path.join(worktree_dir, rel_path) if os.path.exists(os.path.join(worktree_dir, rel_path)) else rel_path
+                    if os.path.exists(src):
                         dest = os.path.join(tmp_dir, rel_path)
                         os.makedirs(os.path.dirname(dest), exist_ok=True)
-                        shutil.copy2(rel_path, dest)
+                        shutil.copy2(src, dest)
                         subprocess.run(["git", "add", rel_path], cwd=tmp_dir, check=False)
             else:
-                if os.path.exists("README.md"):
-                    shutil.copy2("README.md", os.path.join(tmp_dir, "README.md"))
+                src_readme = os.path.join(worktree_dir, "README.md") if os.path.exists(os.path.join(worktree_dir, "README.md")) else "README.md"
+                if os.path.exists(src_readme):
+                    shutil.copy2(src_readme, os.path.join(tmp_dir, "README.md"))
                     subprocess.run(["git", "add", "README.md"], cwd=tmp_dir, check=False)
 
             subprocess.run(["git", "commit", "-m", f"fix: {title[:50]}"], cwd=tmp_dir, check=False)
