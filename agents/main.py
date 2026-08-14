@@ -16,6 +16,7 @@ from agents.model import DeterministicPlanningModel, GroqPlanningModel
 from agents.models import Ticket
 from agents.notifier import NotificationService
 from agents.repository import GitRepository
+from agents.sdk_runtime import OpenHandsCodingRuntime
 from agents.services import WorkflowServices
 from agents.store import JobStore
 
@@ -36,6 +37,7 @@ def build_production_services(database_path: Path, jira_client: JiraClient | Non
     model = GroqPlanningModel(groq_settings)
     kb_settings = KnowledgeBaseSettings.from_environment()
 
+    sdk_runtime = OpenHandsCodingRuntime(workspace_root=".")
     return WorkflowServices(
         config=WorkflowConfig(),
         store=JobStore(database_path),
@@ -44,6 +46,7 @@ def build_production_services(database_path: Path, jira_client: JiraClient | Non
         knowledge_base=KnowledgeBase(database_path.with_name("knowledge.db")),
         jira_client=jira_client,
         notifier=notifier,
+        sdk_runtime=sdk_runtime,
     )
 
 

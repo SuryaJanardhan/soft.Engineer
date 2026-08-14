@@ -36,6 +36,7 @@ def test_services(tmp_path: Path) -> WorkflowServices:
         repository=repository,
         model=model,
         notifier=notifier,
+        sdk_runtime=None,
     )
 
 
@@ -72,6 +73,11 @@ def test_full_multi_agent_flow_and_snapshots(test_services: WorkflowServices):
     assert "validate" in node_names
     assert "checker" in node_names
     assert "notify" in node_names
+
+
+def test_sdk_runtime_is_optional_in_services(test_services: WorkflowServices):
+    assert hasattr(test_services, "sdk_runtime")
+    assert test_services.sdk_runtime is None or hasattr(test_services.sdk_runtime, "is_available")
 
 
 def test_webhook_intake(tmp_path: Path):

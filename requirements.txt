@@ -1,6 +1,20 @@
+# Core workflow orchestration
 langgraph>=1.0,<2.0
+
+# Official OpenHands SDK runtime (production-grade agent execution)
+openhands-sdk>=1.42.1
+openhands-tools>=1.42.1
+
+# Testing
 pytest>=8.0,<9.0
+
+# Configuration and environment
 python-dotenv>=1.0,<2.0
+
+# HTTP and API clients
 requests>=2.32,<3.0
+
+# LLM provider fallback
 groq>=1.0.0,<2.0.0
+
 
