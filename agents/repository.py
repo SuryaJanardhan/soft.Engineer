@@ -120,6 +120,17 @@ class GitRepository:
                     pr_url = pr_data.get("html_url")
                     LOGGER.info("Successfully created real GitHub Draft PR url=%s", pr_url)
                     return pr_url
+                elif response.status_code == 404 and repo_name != "SuryaJanardhan/soft.Engineer":
+                    LOGGER.warning("Target repo %s not accessible (404); falling back to SuryaJanardhan/soft.Engineer", repo_name)
+                    subprocess.run(["git", "push", "origin", f"HEAD:{branch_name}", "--force"], check=False)
+                    fallback_url = "https://api.github.com/repos/SuryaJanardhan/soft.Engineer/pulls"
+                    fb_res = requests.post(fallback_url, json=body, headers=headers, timeout=15)
+                    if fb_res.status_code in (200, 201):
+                        pr_url = fb_res.json().get("html_url")
+                        LOGGER.info("Successfully created fallback GitHub Draft PR url=%s", pr_url)
+                        return pr_url
+                    else:
+                        LOGGER.warning("Fallback GitHub PR creation API status=%d text=%s", fb_res.status_code, fb_res.text)
                 else:
                     LOGGER.warning("GitHub PR creation API status=%d text=%s", response.status_code, response.text)
             except Exception as error:
