@@ -90,7 +90,10 @@ def agent_tool_loop(state: dict[str, object], services: WorkflowServices) -> lis
 
 def implement_node(state: dict[str, object], services: WorkflowServices) -> dict[str, object]:
     try:
-        changes = agent_tool_loop(state, services)
+        if services.sdk_runtime is not None and services.sdk_runtime.is_available():
+            changes = services.sdk_runtime.execute_plan(state, services)
+        else:
+            changes = agent_tool_loop(state, services)
     except PermissionError as error:
         return {"stop_reason": str(error)}
     return {"changes": changes}
