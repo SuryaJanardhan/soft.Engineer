@@ -20,7 +20,9 @@ class GitRepository:
         summary_lower = ticket_summary.lower()
         candidate_files: list[str] = []
 
-        if "readme" in summary_lower or "architecture" in summary_lower or "diagram" in summary_lower:
+        if "architecture.md" in summary_lower or "architecture" in summary_lower:
+            candidate_files.extend(["ARCHITECTURE.md", "README.md"])
+        elif "readme" in summary_lower or "diagram" in summary_lower:
             candidate_files.append("README.md")
         if "agent" in summary_lower or "model" in summary_lower or "groq" in summary_lower:
             candidate_files.extend(["agents/model.py", "agents/config.py", "agents/main.py"])
