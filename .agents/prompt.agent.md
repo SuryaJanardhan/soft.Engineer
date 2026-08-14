@@ -1,0 +1,2 @@
+Every build must be follwoed by tests nt just tests for sake of pass cases real test s that test the realiblity and true ability of the software we write
+make sure enough resasioing is done before taking actions for building or developement
