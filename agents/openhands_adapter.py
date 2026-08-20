@@ -18,6 +18,7 @@ def run_openhands_coder_agent(
     ticket_description: str,
     plan_summary: str,
     candidate_files: list[str],
+    hypothesis: dict[str, object] | None = None,
 ) -> list[dict[str, str]]:
     """Runs the OpenHands SDK autonomous Coder Agent inside the isolated worktree directory.
     
@@ -75,17 +76,28 @@ def run_openhands_coder_agent(
 
         conversation = Conversation(agent=agent, workspace=worktree_path)
 
+        hypothesis_info = ""
+        if hypothesis:
+            hypothesis_info = (
+                f"\nStructured Hypothesis from soft.Engineer Brain:\n"
+                f"- Target Symbols: {hypothesis.get('target_symbols', [])}\n"
+                f"- Expected Behavior: {hypothesis.get('expected_behavior', '')}\n"
+                f"- Proposed Patch: {hypothesis.get('proposed_change', '')}\n"
+                f"- Risk Level: {hypothesis.get('risk_level', 'LOW')}\n"
+            )
+
         prompt = f"""You are an autonomous Coder Agent executing Jira ticket {ticket_id}.
 
 Ticket Summary: {ticket_summary}
 Ticket Description: {ticket_description}
 Execution Plan: {plan_summary}
 Target Candidate Files: {', '.join(candidate_files)}
+{hypothesis_info}
 
 Instructions:
 1. Inspect the workspace directory ({worktree_path}).
 2. Use FileEditorTool to write or modify the requested files (including creating new files like ARCHITECTURE.md if requested).
-3. If creating ARCHITECTURE.md, include a complete, valid Mermaid diagram showing the system architecture and detailed explanations.
+3. Limit file modifications to candidate files or necessary test files.
 4. Run syntax/verification tests with TerminalTool.
 5. Complete the task cleanly.
 """
@@ -101,7 +113,7 @@ Instructions:
     changes: list[dict[str, str]] = []
     worktree = Path(worktree_path)
     for p in worktree.rglob("*"):
-        if p.is_file() and not p.name.startswith("."):
+        if p.is_file() and not p.name.startswith(".") and "node_modules" not in p.parts:
             rel_path = str(p.relative_to(worktree))
             changes.append({
                 "path": rel_path,

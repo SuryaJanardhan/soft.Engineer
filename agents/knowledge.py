@@ -169,6 +169,56 @@ class KnowledgeBase:
             )
         return [fix for _, fix in sorted(ranked_fixes, key=lambda item: item[0], reverse=True)[:5]]
 
+    def search_symbols(self, repository: str, query: str) -> list[dict[str, str]]:
+        """Search code symbols matching query string."""
+        pattern = f"%{query}%"
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT path, symbol, kind FROM code_nodes WHERE repository = ? AND (symbol LIKE ? OR path LIKE ?) LIMIT 20",
+                (repository, pattern, pattern),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_symbol_details(self, repository: str, symbol: str) -> list[dict[str, str]]:
+        """Get definitions and location details for a given symbol name."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT path, symbol, kind, node_key FROM code_nodes WHERE repository = ? AND symbol = ?",
+                (repository, symbol),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_symbol_callers(self, repository: str, symbol: str) -> list[dict[str, str]]:
+        """Find callers and edge relationships pointing to or from a symbol."""
+        pattern = f"%:{symbol}"
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT source_key, target_key, relation FROM code_edges WHERE repository = ? AND (target_key LIKE ? OR source_key LIKE ?)",
+                (repository, pattern, pattern),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_file_dependencies(self, repository: str, path: str) -> list[dict[str, str]]:
+        """Get import and dependency edges for a specific file path."""
+        module_key = f"module:{path}"
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT source_key, target_key, relation FROM code_edges WHERE repository = ? AND source_key = ?",
+                (repository, module_key),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_related_tests(self, repository: str, path: str) -> list[str]:
+        """Find candidate test files associated with a source path."""
+        stem = Path(path).stem
+        test_pattern = f"test_{stem}.py"
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT path FROM code_nodes WHERE repository = ? AND (path LIKE ? OR path LIKE ?) GROUP BY path",
+                (repository, f"%{test_pattern}", f"%tests/%"),
+            ).fetchall()
+        return [row["path"] for row in rows]
+
     def update_fix_outcome(self, repository: str, ticket_id: str, outcome: str) -> None:
         if outcome not in {"merged", "rejected", "reverted"}:
             raise ValueError("Outcome must be merged, rejected, or reverted")
