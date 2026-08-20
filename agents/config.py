@@ -120,7 +120,7 @@ class GroqSettings:
                 if k_clean and k_clean not in keys:
                     keys.append(k_clean)
 
-        model_name = os.getenv("GROQ_MODEL", "groq/groq/compound")
+        model_name = os.getenv("GROQ_MODEL", "groq/qwen/qwen3.6-27b")
         return cls(api_keys=tuple(keys), model_name=model_name)
 
 
