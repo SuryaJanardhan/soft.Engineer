@@ -42,18 +42,14 @@ def run_openhands_coder_agent(
     if not api_key:
         raise ValueError("No valid LLM API key (GROQ_API_KEY_1 / GROQ_API_KEY_2 / OPENAI_API_KEY) configured for OpenHands SDK.")
 
-    model_name = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-    base_url = (
-        "https://api.groq.com/openai/v1"
-        if ("groq" in model_name.lower() or os.getenv("GROQ_API_KEY_1"))
-        else None
-    )
+    model_name = os.getenv("GROQ_MODEL", "groq/groq/compound")
+    if not model_name.startswith("groq/") and os.getenv("GROQ_API_KEY_1"):
+        model_name = f"groq/{model_name}"
 
     try:
         llm = LLM(
             model=model_name,
             api_key=SecretStr(api_key),
-            base_url=base_url,
         )
 
         agent = Agent(
