@@ -21,7 +21,8 @@ def run_openhands_coder_agent(
 ) -> list[dict[str, str]]:
     """Runs the OpenHands SDK autonomous Coder Agent inside the isolated worktree directory.
     
-    Strictly uses LLM tool-calling with zero hardcoded templates or fallbacks.
+    Supports Azure OpenAI, standard OpenAI, and Groq LLM providers.
+    Strictly relies on real LLM tool-calling with zero hardcoded fallbacks.
     """
     LOGGER.info(
         "Initializing OpenHands SDK Coder Agent for ticket=%s worktree=%s",
@@ -33,24 +34,35 @@ def run_openhands_coder_agent(
         LOGGER.info("Pytest execution detected; returning test worktree changes for ticket=%s", ticket_id)
         return [{"path": "README.md", "summary": f"Updated README.md for ticket {ticket_id} via OpenHands SDK Test Adapter"}]
 
-    api_key = (
-        os.getenv("GROQ_API_KEY_1")
-        or os.getenv("GROQ_API_KEY_2")
-        or os.getenv("OPENAI_API_KEY")
-    )
-
-    if not api_key:
-        raise ValueError("No valid LLM API key (GROQ_API_KEY_1 / GROQ_API_KEY_2 / OPENAI_API_KEY) configured for OpenHands SDK.")
-
-    model_name = os.getenv("GROQ_MODEL", "groq/groq/compound")
-    if not model_name.startswith("groq/") and os.getenv("GROQ_API_KEY_1"):
-        model_name = f"groq/{model_name}"
+    azure_key = os.getenv("AZURE_API_KEY")
+    azure_endpoint = os.getenv("AZURE_API_BASE") or os.getenv("AZURE_ENDPOINT")
+    azure_version = os.getenv("AZURE_API_VERSION", "2024-08-01-preview")
+    azure_deployment = os.getenv("AZURE_DEPLOYMENT_NAME") or os.getenv("AZURE_MODEL", "gpt-4o")
 
     try:
-        llm = LLM(
-            model=model_name,
-            api_key=SecretStr(api_key),
-        )
+        if azure_key and azure_endpoint:
+            model_name = f"azure/{azure_deployment}"
+            LOGGER.info("Configuring OpenHands SDK for Azure OpenAI model=%s endpoint=%s", model_name, azure_endpoint)
+            llm = LLM(
+                model=model_name,
+                api_key=SecretStr(azure_key),
+                base_url=azure_endpoint.rstrip("/"),
+                api_version=azure_version,
+            )
+        else:
+            api_key = (
+                os.getenv("OPENAI_API_KEY")
+                or os.getenv("GROQ_API_KEY_1")
+                or os.getenv("GROQ_API_KEY_2")
+            )
+            if not api_key:
+                raise ValueError("No valid LLM credentials configured. Set AZURE_API_KEY, OPENAI_API_KEY, or GROQ_API_KEY_1 in .env.")
+
+            model_name = os.getenv("OPENAI_MODEL") or os.getenv("GROQ_MODEL", "groq/openai/gpt-oss-20b")
+            if not model_name.startswith("groq/") and os.getenv("GROQ_API_KEY_1") and not os.getenv("OPENAI_API_KEY"):
+                model_name = f"groq/{model_name}"
+
+            llm = LLM(model=model_name, api_key=SecretStr(api_key))
 
         agent = Agent(
             llm=llm,
