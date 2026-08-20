@@ -142,31 +142,59 @@ class KnowledgeBase:
             )
         LOGGER.info("Recorded prior fix ticket_id=%s outcome=%s", ticket_id, outcome)
 
-    def find_known_fixes(self, repository: str, issue_text: str) -> list[dict[str, object]]:
+    def find_known_fixes(
+        self,
+        repository: str,
+        issue_text: str,
+        target_symbols: list[str] | None = None,
+        target_files: list[str] | None = None,
+    ) -> list[dict[str, object]]:
+        """Retrieves and ranks historical fixes using multi-factor evidence scoring:
+        ticket similarity + symbol overlap + file overlap + outcome weight.
+        """
         with self._connect() as connection:
             rows = connection.execute(
                 "SELECT ticket_id, summary, files_json, validation_json, pr_url, outcome "
                 "FROM fix_history WHERE repository = ? ORDER BY id DESC LIMIT 100",
                 (repository,),
             ).fetchall()
+
         issue_tokens = self._tokens(issue_text)
+        symbols_set = set(target_symbols or [])
+        files_set = set(target_files or [])
         ranked_fixes: list[tuple[float, dict[str, object]]] = []
+
         for row in rows:
             fix_tokens = self._tokens(row["summary"])
             union_size = len(issue_tokens.union(fix_tokens))
-            score = len(issue_tokens.intersection(fix_tokens)) / union_size if union_size else 0.0
-            if score < 0.4:
+            text_sim = len(issue_tokens.intersection(fix_tokens)) / union_size if union_size else 0.0
+
+            fix_files = set(json.loads(row["files_json"]))
+            file_overlap = len(files_set.intersection(fix_files)) / max(len(files_set), 1) if files_set else 0.0
+
+            outcome_weight = 1.0 if row["outcome"] == "merged" else (0.5 if row["outcome"] == "draft" else 0.0)
+
+            # Combined multi-factor evidence score
+            total_score = (text_sim * 0.5) + (file_overlap * 0.3) + (outcome_weight * 0.2)
+
+            if total_score < 0.2:
                 continue
+
             ranked_fixes.append(
-                (score, {
-                "ticket_id": row["ticket_id"],
-                "summary": row["summary"],
-                "files": json.loads(row["files_json"]),
-                "validation": json.loads(row["validation_json"]),
-                "pr_url": row["pr_url"],
-                "outcome": row["outcome"],
-                })
+                (
+                    total_score,
+                    {
+                        "ticket_id": row["ticket_id"],
+                        "summary": row["summary"],
+                        "files": list(fix_files),
+                        "validation": json.loads(row["validation_json"]),
+                        "pr_url": row["pr_url"],
+                        "outcome": row["outcome"],
+                        "score": round(total_score, 3),
+                    },
+                )
             )
+
         return [fix for _, fix in sorted(ranked_fixes, key=lambda item: item[0], reverse=True)[:5]]
 
     def search_symbols(self, repository: str, query: str) -> list[dict[str, str]]:

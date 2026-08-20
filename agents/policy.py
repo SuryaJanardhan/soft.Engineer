@@ -20,6 +20,12 @@ def evaluate_ticket(ticket: Ticket, incident_severity: str | None, config: Workf
         return PolicyDecision(False, f"Active {incident_severity} incident pauses mutation work")
     if not ticket.description.strip():
         return PolicyDecision(False, "Ticket has no description")
+
+    # Ambiguous requirements & High Risk Gating
+    desc_lower = ticket.description.lower()
+    if len(ticket.description.strip()) < 5 or "needs architectural review" in desc_lower or "tbd" in desc_lower:
+        return PolicyDecision(False, "Ambiguous requirements: Ticket description lacks sufficient detail or requires human architectural decision.")
+
     return PolicyDecision(True)
 
 
