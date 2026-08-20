@@ -38,6 +38,8 @@ def agent_tool_loop(state: dict[str, object], services: WorkflowServices) -> lis
         ticket_description=ticket_description,
         plan_summary=plan_summary,
         candidate_files=candidate_files,
+        hypothesis=state.get("hypothesis"),
+        contract=state.get("contract"),
     )
 
 

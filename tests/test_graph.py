@@ -3,11 +3,14 @@ from agents.models import Ticket
 
 
 def test_graph_creates_a_draft_pr_for_eligible_ticket(tmp_path) -> None:
+    from unittest.mock import patch
     services = build_demo_services(tmp_path / "agent.db")
-    ticket = Ticket("ENG-1", "Demo change", "Description", "P3", "Agent Ready", "demo/repository")
+    ticket = Ticket("ENG-1", "Demo change", "Description of ticket change", "P3", "Agent Ready", "demo/repository")
     services.store.create_job("job-1", ticket)
 
-    result = run_agent_job("job-1", services)
+    with patch("agents.openhands_adapter.run_openhands_coder_agent") as mock_coder:
+        mock_coder.return_value = [{"path": "README.md", "summary": "Updated README.md"}]
+        result = run_agent_job("job-1", services)
 
     assert str(result["pr_url"]).startswith(("https://example.invalid/", "https://github.com/"))
 

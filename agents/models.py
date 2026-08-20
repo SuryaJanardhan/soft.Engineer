@@ -28,6 +28,8 @@ class AgentState(TypedDict, total=False):
     memory_id: str
     context: dict[str, object]
     plan: dict[str, object]
+    hypothesis: dict[str, object]
+    contract: dict[str, object]
     allocated_tasks: list[dict[str, str]]
     worktree_path: str
     branch_name: str

@@ -52,16 +52,27 @@ def test_fixture_repository_benchmark(tmp_path: Path):
         stop_conditions=["Stop if tests pass"],
     )
 
-    # Execute OpenHands Coder Agent in test mode
-    changes = run_openhands_coder_agent(
-        worktree_path=str(fixture_repo),
-        ticket_id="BENCH-001",
-        ticket_summary=contract.summary,
-        ticket_description=contract.description,
-        plan_summary="Fix calculator.py add function",
-        candidate_files=contract.allowed_files,
-        contract=contract,
-    )
+    # Execute OpenHands Coder Agent with mocked LLM conversation applying real worktree file edit
+    from unittest.mock import patch
+    from openhands.sdk import LLM
+    from pydantic import SecretStr
+
+    mock_llm = LLM(model="groq/qwen/qwen3.6-27b", api_key=SecretStr("mock_key"))
+
+    with patch("agents.openhands_adapter.Conversation") as mock_conv, patch("agents.openhands_adapter.LLMProviderFactory.create_llm", return_value=mock_llm):
+        def mock_run():
+            (fixture_repo / "calculator.py").write_text("def add(a, b):\n    return a + b  # Fixed addition bug\n")
+        mock_conv.return_value.run.side_effect = mock_run
+
+        changes = run_openhands_coder_agent(
+            worktree_path=str(fixture_repo),
+            ticket_id="BENCH-001",
+            ticket_summary=contract.summary,
+            ticket_description=contract.description,
+            plan_summary="Fix calculator.py add function",
+            candidate_files=contract.allowed_files,
+            contract=contract,
+        )
 
     assert len(changes) > 0
 

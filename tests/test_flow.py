@@ -41,6 +41,7 @@ def test_services(tmp_path: Path) -> WorkflowServices:
 
 
 def test_full_multi_agent_flow_and_snapshots(test_services: WorkflowServices):
+    from unittest.mock import patch
     ticket = Ticket(
         ticket_id="ENG-200",
         summary="Test multi agent flow",
@@ -55,7 +56,10 @@ def test_full_multi_agent_flow_and_snapshots(test_services: WorkflowServices):
 
     graph = build_agent_graph(test_services)
     state = test_services.store.load_job(job_id)
-    result = graph.invoke({**state, "repair_attempts": 0})
+
+    with patch("agents.openhands_adapter.run_openhands_coder_agent") as mock_coder:
+        mock_coder.return_value = [{"path": "README.md", "summary": "Updated README.md via mock"}]
+        result = graph.invoke({**state, "repair_attempts": 0})
 
     assert result["final_state"] == "awaiting_pr_review"
     assert "intake_data" in result

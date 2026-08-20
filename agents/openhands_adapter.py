@@ -55,10 +55,6 @@ def run_openhands_coder_agent(
         worktree_path,
     )
 
-    if os.getenv("PYTEST_CURRENT_TEST"):
-        LOGGER.info("Pytest execution detected; returning test worktree changes for ticket=%s", ticket_id)
-        return [{"path": "README.md", "summary": f"Updated README.md for ticket {ticket_id} via OpenHands SDK Test Adapter"}]
-
     # Capture pre-execution git snapshot
     pre_changed_files = _get_git_changed_files(worktree_path)
 
